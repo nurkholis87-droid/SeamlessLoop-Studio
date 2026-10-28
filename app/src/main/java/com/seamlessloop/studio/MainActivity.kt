@@ -146,8 +146,10 @@ private fun startLooping() {
                         status.text =
                             "Berhasil! Video disimpan di:\n${outputFile.absolutePath}"
                     } else {
-                        status.text =
-                            "Gagal memproses video. Periksa format video atau log FFmpeg."
+    val log = session.allLogsAsString
+    status.text = "FFmpeg gagal:\n" +
+        (log?.takeLast(1800) ?: "Log tidak tersedia")
+}
                     }
                 }
             }
