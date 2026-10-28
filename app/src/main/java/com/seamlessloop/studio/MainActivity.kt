@@ -1,12 +1,14 @@
 package com.seamlessloop.studio
 
 import android.app.Activity
+import android.content.ContentValues
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
@@ -14,7 +16,6 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import android.widget.Toast
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.Executors
@@ -53,7 +54,7 @@ class MainActivity : Activity() {
         }
 
         val subtitle = TextView(this).apply {
-            text = "\nBuat video looping langsung dari HP kamu"
+            text = "\nLooping Video Studio • Versi 1.3.0"
             textSize = 15f
             setTextColor(0xFFB5BBD0.toInt())
             gravity = Gravity.CENTER
@@ -129,16 +130,12 @@ class MainActivity : Activity() {
         status.text = "Menyiapkan video..."
 
         executor.execute {
-            var inputFile: File? = null
-
             try {
-                inputFile = File(cacheDir, "input_loop.mp4")
+                val inputFile = File(cacheDir, "input_loop.mp4")
 
                 contentResolver.openInputStream(uri).use { input ->
                     if (input == null) {
-                        throw Exception(
-                            "Video tidak dapat dibaca."
-                        )
+                        throw Exception("Video tidak dapat dibaca.")
                     }
 
                     FileOutputStream(inputFile).use { output ->
@@ -147,21 +144,15 @@ class MainActivity : Activity() {
                 }
 
                 if (!inputFile.exists() || inputFile.length() == 0L) {
-                    throw Exception(
-                        "File video kosong atau gagal disalin."
-                    )
+                    throw Exception("File video kosong atau gagal disalin.")
                 }
 
                 val outputDir =
                     getExternalFilesDir(Environment.DIRECTORY_MOVIES)
-                        ?: throw Exception(
-                            "Folder penyimpanan video tidak tersedia."
-                        )
+                        ?: throw Exception("Folder output tidak tersedia.")
 
                 if (!outputDir.exists() && !outputDir.mkdirs()) {
-                    throw Exception(
-                        "Folder output gagal dibuat."
-                    )
+                    throw Exception("Folder output gagal dibuat.")
                 }
 
                 val outputFile = File(
@@ -169,18 +160,13 @@ class MainActivity : Activity() {
                     "SeamlessLoop_${System.currentTimeMillis()}.mp4"
                 )
 
-                val inputPath = inputFile.absolutePath
-                val outputPath = outputFile.absolutePath
-
-                // Loop video menggunakan encoder MPEG-4.
-                // Opsi -preset sengaja tidak digunakan.
                 val command =
                     "-stream_loop ${count - 1} " +
-                    "-i \"$inputPath\" " +
+                    "-i \"${inputFile.absolutePath}\" " +
                     "-c:v mpeg4 -q:v 4 " +
                     "-c:a aac -b:a 128k " +
                     "-movflags +faststart " +
-                    "-y \"$outputPath\""
+                    "-y \"${outputFile.absolutePath}\""
 
                 handler.post {
                     status.text =
@@ -188,53 +174,132 @@ class MainActivity : Activity() {
                 }
 
                 FFmpegKit.executeAsync(command) { session ->
-                    val returnCode = session.returnCode
 
-                    handler.post {
-                        processButton.isEnabled = true
+                    if (ReturnCode.isSuccess(session.returnCode) &&
+                        outputFile.exists() &&
+                        outputFile.length() > 0L
+                    ) {
+                        try {
+                            handler.post {
+                                status.text =
+                                    "Looping berhasil!\nMenyimpan ke Galeri..."
+                            }
 
-                        if (ReturnCode.isSuccess(returnCode) &&
-                            outputFile.exists() &&
-                            outputFile.length() > 0L
-                        ) {
-                            status.text =
-                                "BERHASIL! 🎉\n\n" +
-                                "Jumlah putaran: $count\n" +
-                                "Ukuran video: " +
-                                formatFileSize(outputFile.length()) +
-                                "\n\nLokasi file:\n" +
-                                outputFile.absolutePath +
-                                "\n\nVideo tersimpan di folder Movies milik aplikasi."
-                        } else {
-                            val logs =
-                                session.allLogsAsString ?: ""
+                            val galleryUri = saveToGallery(outputFile)
 
-                            val details =
-                                logs.takeLast(2500).ifBlank {
-                                    "FFmpeg tidak memberikan log error."
+                            handler.post {
+                                processButton.isEnabled = true
+
+                                if (galleryUri != null) {
+                                    status.text =
+                                        "BERHASIL! 🎉\n\n" +
+                                        "Putaran: $count kali\n" +
+                                        "Ukuran: " +
+                                        formatFileSize(outputFile.length()) +
+                                        "\n\n" +
+                                        "Video sudah disimpan ke Galeri!\n\n" +
+                                        "Buka Galeri → Album Movies → " +
+                                        "SeamlessLoop Studio."
+                                } else {
+                                    status.text =
+                                        "Looping berhasil, tetapi gagal " +
+                                        "menyimpan ke Galeri.\n\n" +
+                                        "File sementara:\n" +
+                                        outputFile.absolutePath
                                 }
+                            }
 
+                        } catch (e: Exception) {
+                            handler.post {
+                                processButton.isEnabled = true
+                                status.text =
+                                    "Looping berhasil, tetapi penyimpanan " +
+                                    "ke Galeri gagal:\n" +
+                                    (e.message ?: "Kesalahan tidak diketahui") +
+                                    "\n\nFile sementara:\n" +
+                                    outputFile.absolutePath
+                            }
+                        }
+
+                    } else {
+                        val logs = session.allLogsAsString ?: ""
+                        val details = logs.takeLast(2500).ifBlank {
+                            "FFmpeg tidak memberikan log error."
+                        }
+
+                        handler.post {
+                            processButton.isEnabled = true
                             status.text =
                                 "GAGAL MEMPROSES VIDEO\n\n" +
-                                "Kode hasil: $returnCode\n\n" +
+                                "Kode hasil: ${session.returnCode}\n\n" +
                                 details
-
-                            android.util.Log.e(
-                                "SeamlessLoop",
-                                "FFmpeg gagal: $details"
-                            )
                         }
                     }
                 }
+
             } catch (e: Exception) {
                 handler.post {
                     processButton.isEnabled = true
-
                     status.text =
                         "Terjadi kesalahan:\n" +
                         (e.message ?: "Kesalahan tidak diketahui")
                 }
             }
+        }
+    }
+
+    private fun saveToGallery(file: File): Uri? {
+        val values = ContentValues().apply {
+            put(
+                MediaStore.Video.Media.DISPLAY_NAME,
+                file.name
+            )
+            put(
+                MediaStore.Video.Media.MIME_TYPE,
+                "video/mp4"
+            )
+            put(
+                MediaStore.Video.Media.RELATIVE_PATH,
+                Environment.DIRECTORY_MOVIES +
+                    "/SeamlessLoop Studio"
+            )
+            put(MediaStore.Video.Media.IS_PENDING, 1)
+        }
+
+        val collection =
+            MediaStore.Video.Media.getContentUri(
+                MediaStore.VOLUME_EXTERNAL_PRIMARY
+            )
+
+        val uri = contentResolver.insert(collection, values)
+            ?: throw Exception("Galeri tidak dapat membuat file video.")
+
+        try {
+            val output = contentResolver.openOutputStream(uri)
+                ?: throw Exception("File Galeri tidak dapat dibuka.")
+
+            output.use { destination ->
+                file.inputStream().use { source ->
+                    source.copyTo(destination)
+                }
+            }
+
+            val finishedValues = ContentValues().apply {
+                put(MediaStore.Video.Media.IS_PENDING, 0)
+            }
+
+            contentResolver.update(
+                uri,
+                finishedValues,
+                null,
+                null
+            )
+
+            return uri
+
+        } catch (e: Exception) {
+            contentResolver.delete(uri, null, null)
+            throw e
         }
     }
 
