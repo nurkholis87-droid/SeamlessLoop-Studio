@@ -9,7 +9,12 @@ import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
 import android.view.ViewGroup
-import android.widget.*
+import android.widget.Button
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
+import android.widget.Toast
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.Executors
@@ -19,6 +24,7 @@ import com.arthenica.ffmpegkit.ReturnCode
 class MainActivity : Activity() {
 
     private var videoUri: Uri? = null
+
     private lateinit var status: TextView
     private lateinit var processButton: Button
     private lateinit var loopInput: EditText
@@ -47,7 +53,7 @@ class MainActivity : Activity() {
         }
 
         val subtitle = TextView(this).apply {
-            text = "\nLooping video langsung dari HP kamu"
+            text = "\nBuat video looping langsung dari HP kamu"
             textSize = 15f
             setTextColor(0xFFB5BBD0.toInt())
             gravity = Gravity.CENTER
@@ -55,11 +61,13 @@ class MainActivity : Activity() {
 
         val chooseButton = Button(this).apply {
             text = "📂 PILIH VIDEO"
+
             setOnClickListener {
                 val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                     addCategory(Intent.CATEGORY_OPENABLE)
                     type = "video/*"
                 }
+
                 startActivityForResult(intent, pickVideoCode)
             }
         }
@@ -69,11 +77,13 @@ class MainActivity : Activity() {
             setText("3")
             inputType = 2
             setTextColor(0xFFFFFFFF.toInt())
+            setHintTextColor(0xFFB5BBD0.toInt())
         }
 
         processButton = Button(this).apply {
             text = "🔁 PROSES LOOPING"
             isEnabled = false
+
             setOnClickListener {
                 startLooping()
             }
@@ -100,11 +110,18 @@ class MainActivity : Activity() {
     }
 
     private fun startLooping() {
-        val uri = videoUri ?: return
+        val uri = videoUri
+
+        if (uri == null) {
+            status.text = "Pilih video terlebih dahulu."
+            return
+        }
+
         val count = loopInput.text.toString().toIntOrNull() ?: 0
 
         if (count < 2 || count > 100) {
-            status.text = "Masukkan jumlah putaran antara 2 sampai 100."
+            status.text =
+                "Jumlah putaran harus antara 2 sampai 100."
             return
         }
 
@@ -112,12 +129,16 @@ class MainActivity : Activity() {
         status.text = "Menyiapkan video..."
 
         executor.execute {
+            var inputFile: File? = null
+
             try {
-                val inputFile = File(cacheDir, "input_loop.mp4")
+                inputFile = File(cacheDir, "input_loop.mp4")
 
                 contentResolver.openInputStream(uri).use { input ->
                     if (input == null) {
-                        throw Exception("Video tidak dapat dibaca.")
+                        throw Exception(
+                            "Video tidak dapat dibaca."
+                        )
                     }
 
                     FileOutputStream(inputFile).use { output ->
@@ -125,54 +146,101 @@ class MainActivity : Activity() {
                     }
                 }
 
+                if (!inputFile.exists() || inputFile.length() == 0L) {
+                    throw Exception(
+                        "File video kosong atau gagal disalin."
+                    )
+                }
+
                 val outputDir =
                     getExternalFilesDir(Environment.DIRECTORY_MOVIES)
-                        ?: throw Exception("Folder output tidak tersedia.")
+                        ?: throw Exception(
+                            "Folder penyimpanan video tidak tersedia."
+                        )
+
+                if (!outputDir.exists() && !outputDir.mkdirs()) {
+                    throw Exception(
+                        "Folder output gagal dibuat."
+                    )
+                }
 
                 val outputFile = File(
                     outputDir,
                     "SeamlessLoop_${System.currentTimeMillis()}.mp4"
                 )
 
+                val inputPath = inputFile.absolutePath
+                val outputPath = outputFile.absolutePath
+
+                // Loop video menggunakan encoder MPEG-4.
+                // Opsi -preset sengaja tidak digunakan.
                 val command =
                     "-stream_loop ${count - 1} " +
-                    "-i \"${inputFile.absolutePath}\" " +
-                    "-c:v libx264 -preset ultrafast -crf 23 " +
+                    "-i \"$inputPath\" " +
+                    "-c:v mpeg4 -q:v 4 " +
                     "-c:a aac -b:a 128k " +
                     "-movflags +faststart " +
-                    "\"${outputFile.absolutePath}\""
+                    "-y \"$outputPath\""
 
                 handler.post {
-                    status.text = "Memproses video..."
+                    status.text =
+                        "Memproses video...\nMohon tunggu."
                 }
 
                 FFmpegKit.executeAsync(command) { session ->
                     val returnCode = session.returnCode
-                    val log = session.allLogsAsString
 
                     handler.post {
                         processButton.isEnabled = true
 
-                        if (ReturnCode.isSuccess(returnCode)) {
+                        if (ReturnCode.isSuccess(returnCode) &&
+                            outputFile.exists() &&
+                            outputFile.length() > 0L
+                        ) {
                             status.text =
-                                "Berhasil! Video disimpan di:\n" +
-                                outputFile.absolutePath
+                                "BERHASIL! 🎉\n\n" +
+                                "Jumlah putaran: $count\n" +
+                                "Ukuran video: " +
+                                formatFileSize(outputFile.length()) +
+                                "\n\nLokasi file:\n" +
+                                outputFile.absolutePath +
+                                "\n\nVideo tersimpan di folder Movies milik aplikasi."
                         } else {
+                            val logs =
+                                session.allLogsAsString ?: ""
+
+                            val details =
+                                logs.takeLast(2500).ifBlank {
+                                    "FFmpeg tidak memberikan log error."
+                                }
+
                             status.text =
-                                "FFmpeg gagal:\n" +
-                                (log?.takeLast(1800)
-                                    ?: "Log tidak tersedia.")
+                                "GAGAL MEMPROSES VIDEO\n\n" +
+                                "Kode hasil: $returnCode\n\n" +
+                                details
+
+                            android.util.Log.e(
+                                "SeamlessLoop",
+                                "FFmpeg gagal: $details"
+                            )
                         }
                     }
                 }
             } catch (e: Exception) {
                 handler.post {
                     processButton.isEnabled = true
+
                     status.text =
-                        "Error: ${e.message ?: "Kesalahan tidak diketahui"}"
+                        "Terjadi kesalahan:\n" +
+                        (e.message ?: "Kesalahan tidak diketahui")
                 }
             }
         }
+    }
+
+    private fun formatFileSize(bytes: Long): String {
+        val mb = bytes / (1024.0 * 1024.0)
+        return String.format("%.2f MB", mb)
     }
 
     override fun onActivityResult(
@@ -182,12 +250,18 @@ class MainActivity : Activity() {
     ) {
         super.onActivityResult(requestCode, resultCode, data)
 
-        if (requestCode == pickVideoCode && resultCode == RESULT_OK) {
+        if (requestCode == pickVideoCode &&
+            resultCode == RESULT_OK
+        ) {
             videoUri = data?.data
 
             if (videoUri != null) {
                 processButton.isEnabled = true
-                status.text = "Video berhasil dipilih! Siap diproses."
+                status.text =
+                    "Video berhasil dipilih!\nSiap diproses."
+            } else {
+                processButton.isEnabled = false
+                status.text = "Video belum dipilih."
             }
         }
     }
@@ -199,5 +273,10 @@ class MainActivity : Activity() {
         ).apply {
             topMargin = 12
         }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        executor.shutdown()
     }
 }
