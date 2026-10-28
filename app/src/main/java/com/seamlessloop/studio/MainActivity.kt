@@ -45,6 +45,7 @@ class MainActivity : Activity() {
     private var sourceFile: File? = null
     private var sourceDuration = 0.0
     private var sourceSize = 0L
+    private var sourceHasAudio = false
     private var isProcessing = false
 
     companion object {
@@ -72,7 +73,7 @@ class MainActivity : Activity() {
         scroll.addView(root)
 
         root.addView(TextView(this).apply {
-            text = "SeamlessLoop Studio 1.7"
+            text = "SeamlessLoop Studio 1.8.0"
             textSize = 27f
             setTextColor(white)
             gravity = Gravity.CENTER
@@ -132,7 +133,7 @@ class MainActivity : Activity() {
 
         space(root, 12)
         root.addView(label("6. AUDIO", white))
-        audioSpinner = spinner(listOf("Pertahankan audio", "Tanpa suara"), card, white)
+        audioSpinner = spinner(listOf("Pertahankan audio (sambung biasa)", "Crossfade audio (mode crossfade)", "Tanpa suara"), card, white)
         root.addView(audioSpinner, matchWidth())
 
         space(root, 18)
@@ -244,6 +245,7 @@ class MainActivity : Activity() {
         sourceFile = null
         sourceDuration = 0.0
         sourceSize = 0L
+        sourceHasAudio = false
         processButton.isEnabled = false
         chooseButton.isEnabled = false
         estimateButton.isEnabled = false
@@ -258,6 +260,7 @@ class MainActivity : Activity() {
                 FFmpegKit.executeAsync("-i \"${file.absolutePath}\"") { session ->
                     val logs = session.allLogsAsString ?: ""
                     val match = Regex("""Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)""").find(logs)
+                    val hasAudio = Regex("""Stream #\d+:\d+.*Audio:""", RegexOption.IGNORE_CASE).containsMatchIn(logs)
                     val duration = if (match != null) {
                         match.groupValues[1].toDouble() * 3600 +
                             match.groupValues[2].toDouble() * 60 +
@@ -271,7 +274,8 @@ class MainActivity : Activity() {
                             sourceFile = file
                             sourceDuration = duration
                             sourceSize = file.length()
-                            videoInfo.text = "Video siap digunakan\nDurasi: ${formatDuration(duration)}\nUkuran: ${formatBytes(sourceSize)}"
+                            sourceHasAudio = hasAudio
+                            videoInfo.text = "Video siap digunakan\nDurasi: ${formatDuration(duration)}\nUkuran: ${formatBytes(sourceSize)}\nAudio: ${if (hasAudio) "tersedia" else "tidak ditemukan"}"
                             processButton.isEnabled = true
                             status.text = "Status: Video berhasil dibaca."
                             updateEstimate()
@@ -349,7 +353,8 @@ class MainActivity : Activity() {
 
         val resolution = resolutionSpinner.selectedItemPosition
         val quality = qualitySpinner.selectedItemPosition
-        val noAudio = audioSpinner.selectedItemPosition == 1
+        val audioMode = audioSpinner.selectedItemPosition
+        val includeAudio = audioMode != 2 && sourceHasAudio
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val output = File(cacheDir, "SeamlessLoop_$timestamp.mp4")
         val scaleFilter = when (resolution) {
@@ -362,10 +367,10 @@ class MainActivity : Activity() {
             2 -> "2"
             else -> "4"
         }
-        val audioOptions = if (noAudio) "-an" else "-c:a aac -b:a 128k"
+        val audioOptions = if (!includeAudio) "-an" else "-c:a aac -b:a 128k"
 
         val command = if (crossfade) {
-            buildCrossfadeCommand(input, output, targetSeconds, sourceDuration, scaleFilter, qualityValue, noAudio)
+            buildCrossfadeCommand(input, output, targetSeconds, sourceDuration, scaleFilter, qualityValue, includeAudio, audioMode)
         } else {
             val repetitions = ceil(targetSeconds.toDouble() / sourceDuration).toInt().coerceAtLeast(1)
             buildString {
@@ -385,7 +390,8 @@ class MainActivity : Activity() {
         estimateButton.isEnabled = false
         progressBar.progress = 0
         progressText.text = "Progres: 0%"
-        status.text = if (crossfade) "Status: Memproses crossfade. Ini bisa lebih lama..." else "Status: Mengekspor video..."
+        status.text = (if (crossfade) "Status: Memproses crossfade. Ini bisa lebih lama..." else "Status: Mengekspor video...") +
+            if (!includeAudio) "\nOutput tanpa audio." else if (crossfade && audioMode == 1) "\nAudio memakai crossfade." else "\nAudio dipertahankan tanpa crossfade."
 
         FFmpegKit.executeAsync(
             command,
@@ -402,6 +408,7 @@ class MainActivity : Activity() {
                                 "Ukuran hasil: ${formatBytes(output.length())}\n" +
                                 "Codec: MPEG-4\n" +
                                 "Mode: ${if (crossfade) "Seamless Crossfade" else "Loop biasa"}\n" +
+                                "Audio: ${if (!includeAudio) "tanpa audio" else if (crossfade && audioMode == 1) "crossfade halus" else "dipertahankan"}\n" +
                                 "Lokasi: Movies/SeamlessLoop Studio"
                             Toast.makeText(this, "Video berhasil disimpan ke Galeri!", Toast.LENGTH_LONG).show()
                         }
@@ -438,7 +445,8 @@ class MainActivity : Activity() {
         sourceDuration: Double,
         scaleFilter: String,
         qualityValue: String,
-        noAudio: Boolean
+        includeAudio: Boolean,
+        audioMode: Int
     ): String {
         val overlap = CROSSFADE_SECONDS
         val repetitions = ceil(targetSeconds / (sourceDuration - overlap)).toInt().coerceAtLeast(2)
@@ -449,8 +457,8 @@ class MainActivity : Activity() {
 
         for (i in 0 until repetitions) {
             filters.append("[$i:v]setpts=PTS-STARTPTS,$scaleFilter,format=yuv420p[v$i];")
-            if (!noAudio) {
-                filters.append("[$i:a]aresample=async=1:first_pts=0,asetpts=PTS-STARTPTS[a$i];")
+            if (includeAudio) {
+                filters.append("[$i:a]aresample=async=1:first_pts=0,atrim=duration=$sourceDuration,apad=whole_dur=$sourceDuration,asetpts=PTS-STARTPTS[a$i];")
             }
         }
 
@@ -462,22 +470,30 @@ class MainActivity : Activity() {
             filters.append("[$currentVideo][v$i]xfade=transition=fade:duration=$overlap:offset=$offset[vx$i];")
             currentVideo = "vx$i"
             currentDuration += sourceDuration - overlap
-            if (!noAudio) {
+
+            if (includeAudio && audioMode == 1) {
                 filters.append("[$currentAudio][a$i]acrossfade=d=$overlap:c1=tri:c2=tri[ax$i];")
                 currentAudio = "ax$i"
             }
         }
 
         filters.append("[$currentVideo]trim=duration=$targetSeconds,setpts=PTS-STARTPTS[vout]")
-        if (!noAudio) filters.append(";[$currentAudio]atrim=duration=$targetSeconds,asetpts=PTS-STARTPTS[aout]")
+        if (includeAudio) {
+            if (audioMode == 1) {
+                filters.append(";[$currentAudio]atrim=duration=$targetSeconds,asetpts=PTS-STARTPTS[aout]")
+            } else {
+                val audioInputs = (0 until repetitions).joinToString("") { "[a$it]" }
+                filters.append(";$audioInputs concat=n=$repetitions:v=0:a=1,atrim=duration=$targetSeconds,asetpts=PTS-STARTPTS[aout]")
+            }
+        }
 
         return buildString {
             append(inputs)
             append("-filter_complex \"${filters}\" ")
             append("-map \"[vout]\" ")
-            if (!noAudio) append("-map \"[aout]\" ")
+            if (includeAudio) append("-map \"[aout]\" ")
             append("-c:v mpeg4 -q:v $qualityValue -pix_fmt yuv420p ")
-            if (noAudio) append("-an ") else append("-c:a aac -b:a 128k ")
+            if (!includeAudio) append("-an ") else append("-c:a aac -b:a 128k ")
             append("-t $targetSeconds -movflags +faststart ")
             append("-y \"${output.absolutePath}\"")
         }
