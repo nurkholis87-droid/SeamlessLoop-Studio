@@ -13,8 +13,8 @@ import android.os.Looper
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.Executors
-import dev.ffmpegkit.FFmpegKit
-import dev.ffmpegkit.ReturnCode
+import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.ReturnCode
 
 class MainActivity : Activity() {
 
