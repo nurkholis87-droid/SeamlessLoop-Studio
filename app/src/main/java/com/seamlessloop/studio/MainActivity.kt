@@ -5,15 +5,16 @@ import android.content.ContentValues
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.*
-import android.graphics.drawable.GradientDrawable
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.ReturnCode
 import java.io.File
@@ -45,7 +46,6 @@ class MainActivity : Activity() {
     private lateinit var processButton: Button
 
     private var sourceFile: File? = null
-    private var sourceName = ""
     private var isProcessing = false
 
     private val executor = Executors.newSingleThreadExecutor()
@@ -85,25 +85,22 @@ class MainActivity : Activity() {
 
         val logo = TextView(this).apply {
             text = "∞"
-            textSize = 38f
+            textSize = 42f
             gravity = Gravity.CENTER
             setTextColor(white)
             typeface = Typeface.DEFAULT_BOLD
             background = rounded(blue, 18)
         }
 
-        header.addView(
-            logo,
-            LinearLayout.LayoutParams(dp(64), dp(64))
-        )
+        header.addView(logo, LinearLayout.LayoutParams(dp(64), dp(64)))
 
         val heading = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(14), 0, 0, 0)
         }
 
-        heading.addView(label("SeamlessLoop", 24f, white, true))
-        heading.addView(label("STUDIO • VIDEO LOOP MAKER", 11f, muted, true))
+        heading.addView(label("SeamlessLoop Studio", 22f, white, true))
+        heading.addView(label("VIDEO LOOP • LONG VIDEO MAKER", 11f, muted))
 
         header.addView(
             heading,
@@ -114,53 +111,45 @@ class MainActivity : Activity() {
         root.addView(space(20))
 
         val intro = card()
-
         intro.addView(label("Buat video panjang", 22f, white, true))
-        intro.addView(space(6))
+        intro.addView(space(8))
         intro.addView(
             label(
-                "Ubah video pendek menjadi video berulang dengan durasi, resolusi, dan kualitas pilihanmu.",
+                "Ubah video pendek menjadi video panjang. " +
+                    "Atur durasi, resolusi, kualitas, dan audio.",
                 14f,
                 muted
             )
         )
 
         root.addView(intro)
-        root.addView(space(18))
+        root.addView(space(16))
 
         val videoCard = card()
-        videoCard.addView(label("01  •  VIDEO SUMBER", 13f, blue, true))
+        videoCard.addView(label("01 • VIDEO SUMBER", 13f, blue, true))
         videoCard.addView(space(12))
 
         chooseButton = button("PILIH VIDEO", blue)
-        chooseButton.setOnClickListener {
-            openVideoPicker()
-        }
-
-        videoCard.addView(
-            chooseButton,
-            matchWrap()
-        )
+        chooseButton.setOnClickListener { openVideoPicker() }
+        videoCard.addView(chooseButton, matchWrap())
 
         videoCard.addView(space(10))
-
         videoInfo = label("Belum ada video yang dipilih", 13f, muted)
         videoCard.addView(videoInfo)
 
         root.addView(videoCard)
         root.addView(space(14))
 
-        val settingsCard = card()
+        val settings = card()
+        settings.addView(label("02 • PENGATURAN VIDEO", 13f, blue, true))
+        settings.addView(space(14))
 
-        settingsCard.addView(label("02  •  PENGATURAN VIDEO", 13f, blue, true))
-        settingsCard.addView(space(14))
-
-        settingsCard.addView(label("Durasi hasil (menit)", 14f, white, true))
-        settingsCard.addView(space(6))
+        settings.addView(label("Durasi hasil (menit)", 14f, white, true))
+        settings.addView(space(6))
 
         durationInput = EditText(this).apply {
             setText("1")
-            hint = "1 sampai 60 menit"
+            hint = "Masukkan 1–60 menit"
             textSize = 16f
             setTextColor(white)
             setHintTextColor(muted)
@@ -169,72 +158,60 @@ class MainActivity : Activity() {
             background = rounded(Color.rgb(18, 28, 47), 12)
         }
 
-        settingsCard.addView(durationInput, matchWrap())
-        settingsCard.addView(space(14))
+        settings.addView(durationInput, matchWrap())
+        settings.addView(space(14))
 
-        settingsCard.addView(label("Resolusi", 14f, white, true))
-        settingsCard.addView(space(6))
+        settings.addView(label("Resolusi", 14f, white, true))
+        settings.addView(space(6))
 
         resolutionSpinner = spinner(
             listOf("Resolusi asli", "720p", "1080p")
         )
+        settings.addView(resolutionSpinner, matchWrap())
+        settings.addView(space(14))
 
-        settingsCard.addView(resolutionSpinner, matchWrap())
-        settingsCard.addView(space(14))
+        settings.addView(label("Kualitas video", 14f, white, true))
+        settings.addView(space(6))
 
-        settingsCard.addView(label("Kualitas video", 14f, white, true))
-        settingsCard.addView(space(6))
-
-        qualitySpinner = spinner(
-            listOf("Hemat", "Standar", "Tinggi")
-        )
+        qualitySpinner = spinner(listOf("Hemat", "Standar", "Tinggi"))
         qualitySpinner.setSelection(1)
+        settings.addView(qualitySpinner, matchWrap())
+        settings.addView(space(14))
 
-        settingsCard.addView(qualitySpinner, matchWrap())
-        settingsCard.addView(space(14))
+        settings.addView(label("Audio", 14f, white, true))
+        settings.addView(space(6))
 
-        settingsCard.addView(label("Audio", 14f, white, true))
-        settingsCard.addView(space(6))
+        audioSpinner = spinner(listOf("Pertahankan audio", "Tanpa suara"))
+        settings.addView(audioSpinner, matchWrap())
 
-        audioSpinner = spinner(
-            listOf("Pertahankan audio", "Tanpa suara")
-        )
-
-        settingsCard.addView(audioSpinner, matchWrap())
-
-        root.addView(settingsCard)
+        root.addView(settings)
         root.addView(space(14))
 
         val estimateCard = card()
-
-        estimateCard.addView(label("03  •  ESTIMASI", 13f, blue, true))
+        estimateCard.addView(label("03 • ESTIMASI", 13f, blue, true))
         estimateCard.addView(space(10))
 
         estimate = label(
-            "Pilih video dan hitung estimasi sebelum memproses.",
+            "Pilih video untuk menghitung perkiraan ukuran hasil.",
             14f,
             muted
         )
-
         estimateCard.addView(estimate)
         estimateCard.addView(space(12))
 
-        estimateButton = button("HITUNG ESTIMASI", Color.rgb(54, 76, 108))
-        estimateButton.setOnClickListener {
-            updateEstimate()
-        }
-
+        estimateButton = button("HITUNG ESTIMASI", cardColor)
+        estimateButton.setOnClickListener { updateEstimate() }
         estimateCard.addView(estimateButton, matchWrap())
 
         root.addView(estimateCard)
         root.addView(space(14))
 
         val processCard = card()
-
-        processCard.addView(label("04  •  PROSES VIDEO", 13f, blue, true))
+        processCard.addView(label("04 • PROSES VIDEO", 13f, blue, true))
         processCard.addView(space(12))
 
-        progressText = label("Progres: 0%", white, true)
+        // Urutan parameter label: teks, ukuran, warna, bold.
+        progressText = label("Progres: 0%", 14f, white, true)
         processCard.addView(progressText)
         processCard.addView(space(8))
 
@@ -260,24 +237,20 @@ class MainActivity : Activity() {
         processButton = button("BUAT VIDEO PANJANG", blue)
         processButton.isEnabled = false
         processButton.alpha = 0.5f
-
-        processButton.setOnClickListener {
-            startProcessing()
-        }
+        processButton.setOnClickListener { startProcessing() }
 
         processCard.addView(processButton, matchWrap())
         processCard.addView(space(12))
 
         status = label(
-            "Hasil video akan disimpan ke Movies/SeamlessLoop Studio.",
+            "Hasil disimpan ke Movies/SeamlessLoop Studio.",
             12f,
             muted
         )
-
         processCard.addView(status)
 
         root.addView(processCard)
-        root.addView(space(18))
+        root.addView(space(20))
 
         val footer = label(
             "SEAMLESSLOOP STUDIO • CREATE YOUR LOOP",
@@ -285,7 +258,6 @@ class MainActivity : Activity() {
             muted,
             true
         )
-
         footer.gravity = Gravity.CENTER
         root.addView(footer)
 
@@ -297,11 +269,10 @@ class MainActivity : Activity() {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "video/*"
         }
-
         startActivityForResult(intent, PICK_VIDEO)
     }
 
-    @Deprecated("Deprecated by Android, retained for compatibility")
+    @Deprecated("Kept for compatibility")
     override fun onActivityResult(
         requestCode: Int,
         resultCode: Int,
@@ -312,30 +283,25 @@ class MainActivity : Activity() {
         if (requestCode != PICK_VIDEO ||
             resultCode != RESULT_OK ||
             data?.data == null
-        ) {
-            return
-        }
+        ) return
 
         val uri = data.data!!
 
-        status.text = "Menyiapkan video..."
         chooseButton.isEnabled = false
+        status.text = "Menyiapkan video..."
 
         executor.execute {
             try {
-                val copiedFile = copyToCache(uri)
+                val file = copyToCache(uri)
                 val name = getDisplayName(uri)
 
                 runOnUiThread {
-                    sourceFile = copiedFile
-                    sourceName = name
-
+                    sourceFile = file
                     videoInfo.text = "Video: $name"
                     status.text = "Video siap diproses."
                     processButton.isEnabled = true
                     processButton.alpha = 1f
                     chooseButton.isEnabled = true
-
                     updateEstimate()
                 }
             } catch (e: Exception) {
@@ -348,14 +314,14 @@ class MainActivity : Activity() {
     }
 
     private fun copyToCache(uri: Uri): File {
-        val output = File(cacheDir, "seamless_source_${System.currentTimeMillis()}.mp4")
+        val output = File(
+            cacheDir,
+            "seamless_source_${System.currentTimeMillis()}.mp4"
+        )
 
         contentResolver.openInputStream(uri).use { input ->
             requireNotNull(input) { "Video tidak dapat dibaca." }
-
-            FileOutputStream(output).use { out ->
-                input.copyTo(out)
-            }
+            FileOutputStream(output).use { out -> input.copyTo(out) }
         }
 
         if (!output.exists() || output.length() == 0L) {
@@ -368,22 +334,17 @@ class MainActivity : Activity() {
     private fun getDisplayName(uri: Uri): String {
         var name = "Video terpilih"
 
-        val cursor = contentResolver.query(
+        contentResolver.query(
             uri,
-            arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+            arrayOf(OpenableColumns.DISPLAY_NAME),
             null,
             null,
             null
-        )
-
-        cursor?.use {
-            if (it.moveToFirst()) {
-                val index = it.getColumnIndex(
-                    android.provider.OpenableColumns.DISPLAY_NAME
-                )
-
+        )?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                 if (index >= 0) {
-                    name = it.getString(index) ?: name
+                    name = cursor.getString(index) ?: name
                 }
             }
         }
@@ -401,20 +362,18 @@ class MainActivity : Activity() {
         }
 
         if (minutes == null || minutes !in 1..60) {
-            estimate.text = "Masukkan durasi antara 1 sampai 60 menit."
+            estimate.text = "Durasi harus 1–60 menit."
             return
         }
 
-        val targetSeconds = minutes * 60L
-        val estimatedBytes = file.length() *
-            (targetSeconds.toDouble() / 60.0) *
-            qualityFactor()
+        val estimatedBytes =
+            file.length() * (minutes * 60.0 / 60.0) * qualityFactor()
 
         estimate.text =
             "Durasi target: $minutes menit\n" +
             "Ukuran sumber: ${formatBytes(file.length())}\n" +
             "Perkiraan ukuran hasil: ${formatBytes(estimatedBytes.toLong())}\n\n" +
-            "Estimasi dapat berubah sesuai isi video dan audio."
+            "Ukuran aktual dapat berbeda."
     }
 
     private fun qualityFactor(): Double {
@@ -429,22 +388,20 @@ class MainActivity : Activity() {
         if (isProcessing) return
 
         val input = sourceFile
-
         if (input == null || !input.exists()) {
             status.text = "Pilih video terlebih dahulu."
             return
         }
 
         val minutes = durationInput.text.toString().toIntOrNull()
-
         if (minutes == null || minutes !in 1..60) {
-            status.text = "Durasi harus antara 1 sampai 60 menit."
+            status.text = "Durasi harus 1–60 menit."
             return
         }
 
         val durationSeconds = minutes * 60
 
-        val resolutionFilter = when (resolutionSpinner.selectedItemPosition) {
+        val resolution = when (resolutionSpinner.selectedItemPosition) {
             1 -> "scale=-2:720"
             2 -> "scale=-2:1080"
             else -> "scale=trunc(iw/2)*2:trunc(ih/2)*2"
@@ -456,13 +413,14 @@ class MainActivity : Activity() {
             else -> "4"
         }
 
-        val audioOption = audioSpinner.selectedItemPosition
-        val tempOutput = File(
+        val noAudio = audioSpinner.selectedItemPosition == 1
+
+        val output = File(
             cacheDir,
             "seamless_result_${System.currentTimeMillis()}.mp4"
         )
 
-        val audioCommand = if (audioOption == 1) {
+        val audioArgs = if (noAudio) {
             "-an"
         } else {
             "-map 0:a? -c:a aac -b:a 128k"
@@ -472,56 +430,57 @@ class MainActivity : Activity() {
             "-y -stream_loop -1 " +
             "-i ${quotePath(input.absolutePath)} " +
             "-t $durationSeconds " +
-            "-vf $resolutionFilter " +
+            "-vf \"$resolution\" " +
             "-c:v mpeg4 -q:v $quality " +
             "-pix_fmt yuv420p " +
-            "$audioCommand " +
-            "-movflags +faststart " +
-            quotePath(tempOutput.absolutePath)
+            "$audioArgs -movflags +faststart " +
+            quotePath(output.absolutePath)
 
         isProcessing = true
         processButton.isEnabled = false
         chooseButton.isEnabled = false
         estimateButton.isEnabled = false
-
         progressBar.progress = 0
-        progressText.text = "Progres: memulai..."
-        status.text = "Sedang membuat video. Jangan tutup aplikasi."
+        progressText.text = "Progres: 0%"
+        status.text = "Sedang memproses video..."
 
+        // Callback FFmpegKit: selesai, log, statistik.
         FFmpegKit.executeAsync(
             command,
             { session ->
                 val success = ReturnCode.isSuccess(session.returnCode)
 
-                if (success && tempOutput.exists() && tempOutput.length() > 0L) {
+                if (success && output.exists() && output.length() > 0L) {
                     try {
-                        val savedUri = saveToGallery(tempOutput)
+                        saveToGallery(output)
 
                         runOnUiThread {
                             progressBar.progress = 100
                             progressText.text = "Progres: 100%"
                             status.text =
-                                "Berhasil!\nVideo tersimpan di Movies/SeamlessLoop Studio."
+                                "Berhasil! Video tersimpan di Movies/SeamlessLoop Studio."
                             videoInfo.text =
-                                "Selesai: ${formatBytes(tempOutput.length())}"
+                                "Selesai: ${formatBytes(output.length())}"
                         }
                     } catch (e: Exception) {
                         runOnUiThread {
                             status.text =
-                                "Video berhasil dibuat, tetapi gagal menyimpan ke galeri: ${e.message}"
+                                "Video dibuat, tetapi gagal disimpan: ${e.message}"
                         }
                     }
                 } else {
-                    val logs = session.allLogsAsString()
+                    android.util.Log.e(
+                        "SeamlessLoop",
+                        session.allLogsAsString()
+                    )
                     runOnUiThread {
                         status.text =
-                            "Proses gagal. Periksa format video atau ruang penyimpanan."
+                            "Proses gagal. Periksa format video dan ruang penyimpanan."
                         progressText.text = "Progres: gagal"
                     }
-                    android.util.Log.e("SeamlessLoop", logs)
                 }
 
-                tempOutput.delete()
+                output.delete()
 
                 runOnUiThread {
                     isProcessing = false
@@ -530,23 +489,22 @@ class MainActivity : Activity() {
                     estimateButton.isEnabled = true
                 }
             },
-            { log ->
-                val message = log.message ?: ""
-                val match = Regex("time=([0-9:.]+)").find(message)
-
-                if (match != null) {
-                    val seconds = parseTime(match.groupValues[1])
-                    val percent = ((seconds / durationSeconds) * 100)
-                        .toInt()
-                        .coerceIn(0, 99)
+            null,
+            { statistics ->
+                val elapsedMs = statistics.time
+                if (elapsedMs > 0) {
+                    val percent =
+                        ((elapsedMs.toDouble() /
+                            (durationSeconds * 1000.0)) * 100.0)
+                            .toInt()
+                            .coerceIn(0, 99)
 
                     runOnUiThread {
                         progressBar.progress = percent
                         progressText.text = "Progres: $percent%"
                     }
                 }
-            },
-            { }
+            }
         )
     }
 
@@ -574,17 +532,14 @@ class MainActivity : Activity() {
         try {
             contentResolver.openOutputStream(uri).use { output ->
                 requireNotNull(output) { "Tidak dapat membuka file tujuan." }
-
-                file.inputStream().use { input ->
-                    input.copyTo(output)
-                }
+                file.inputStream().use { input -> input.copyTo(output) }
             }
 
-            val updateValues = ContentValues().apply {
+            val done = ContentValues().apply {
                 put(MediaStore.Video.Media.IS_PENDING, 0)
             }
+            contentResolver.update(uri, done, null, null)
 
-            contentResolver.update(uri, updateValues, null, null)
             return uri
         } catch (e: Exception) {
             contentResolver.delete(uri, null, null)
@@ -594,21 +549,6 @@ class MainActivity : Activity() {
 
     private fun quotePath(path: String): String {
         return "'" + path.replace("'", "'\\''") + "'"
-    }
-
-    private fun parseTime(value: String): Double {
-        return try {
-            val parts = value.split(":")
-            if (parts.size != 3) {
-                0.0
-            } else {
-                parts[0].toDouble() * 3600.0 +
-                    parts[1].toDouble() * 60.0 +
-                    parts[2].toDouble()
-            }
-        } catch (_: Exception) {
-            0.0
-        }
     }
 
     private fun formatBytes(bytes: Long): String {
@@ -661,7 +601,6 @@ class MainActivity : Activity() {
             android.R.layout.simple_spinner_item,
             items
         )
-
         adapter.setDropDownViewResource(
             android.R.layout.simple_spinner_dropdown_item
         )
@@ -682,10 +621,7 @@ class MainActivity : Activity() {
 
     private fun space(height: Int): View {
         return View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(
-                1,
-                dp(height)
-            )
+            layoutParams = LinearLayout.LayoutParams(1, dp(height))
         }
     }
 
