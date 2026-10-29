@@ -530,10 +530,14 @@ class MainActivity : Activity() {
             ?: throw IllegalStateException("Tidak dapat membuat file galeri.")
 
         try {
-            contentResolver.openOutputStream(uri).use { output ->
-                requireNotNull(output) { "Tidak dapat membuka file tujuan." }
-                file.inputStream().use { input -> input.copyTo(output) }
-            }
+            val outputStream = contentResolver.openOutputStream(uri, "w")
+    ?: throw IllegalStateException("Tidak dapat membuka file tujuan.")
+
+outputStream.use { output ->
+    file.inputStream().use { input ->
+        input.copyTo(output)
+    }
+}
 
             val done = ContentValues().apply {
                 put(MediaStore.Video.Media.IS_PENDING, 0)
