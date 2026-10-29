@@ -27,6 +27,7 @@ class MainActivity : Activity() {
 
     private lateinit var status: TextView
     private lateinit var videoInfo: TextView
+    private lateinit var previewVideo: VideoView
     private lateinit var estimate: TextView
     private lateinit var progressText: TextView
     private lateinit var progressBar: ProgressBar
@@ -89,17 +90,16 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(2), dp(2), dp(2), dp(8))
         }
-        // Logo dibuat langsung dengan kode agar tidak bergantung pada file drawable eksternal.
         val logo = TextView(this).apply {
-            text = "SL"
-            textSize = 23f
+            text = "∞"
+            textSize = 48f
             gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
+            setTextColor(cyan)
             setTypeface(null, android.graphics.Typeface.BOLD)
-            background = roundedBackground(blue, dp(18), cyan, dp(2))
+            background = roundedBackground(Color.rgb(8, 54, 91), dp(20), line, dp(1))
             contentDescription = "Logo SeamlessLoop Studio"
         }
-        header.addView(logo, LinearLayout.LayoutParams(dp(64), dp(64)))
+        header.addView(logo, LinearLayout.LayoutParams(dp(72), dp(72)))
         val brandText = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), 0, 0, 0)
@@ -176,6 +176,23 @@ class MainActivity : Activity() {
         }
         sourceRow.addView(videoInfo, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         sourceCard.addView(sourceRow, matchWidth())
+        space(sourceCard, 14)
+        previewVideo = VideoView(this).apply {
+            setBackgroundColor(Color.BLACK)
+            setOnPreparedListener { player ->
+                player.isLooping = false
+                seekTo(1)
+            }
+        }
+        sourceCard.addView(previewVideo, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(210)
+        ))
+        val previewHint = label("PREVIEW VIDEO • Gunakan kontrol untuk memutar", muted).apply {
+            textSize = 11f
+            gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, 0)
+        }
+        sourceCard.addView(previewHint, matchWidth())
         space(sourceCard, 12)
         val changeVideo = button("Ganti / Pilih Video", Color.rgb(14, 46, 78)).apply {
             background = roundedBackground(Color.rgb(14, 46, 78), dp(12), line, dp(1))
@@ -430,6 +447,9 @@ class MainActivity : Activity() {
         sourceFile = null
         sourceDuration = 0.0
         sourceSize = 0L
+        previewVideo.stopPlayback()
+        previewVideo.setVideoURI(uri)
+        previewVideo.setMediaController(MediaController(this).apply { setAnchorView(previewVideo) })
         sourceHasAudio = false
         processButton.isEnabled = false
         chooseButton.isEnabled = false
@@ -685,30 +705,19 @@ class MainActivity : Activity() {
     }
 
     private fun saveToGallery(file: File): Uri {
-        val values = ContentValues()
-        values.put(MediaStore.Video.Media.DISPLAY_NAME, file.name)
-        values.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
-        values.put(
-            MediaStore.Video.Media.RELATIVE_PATH,
-            Environment.DIRECTORY_MOVIES + "/SeamlessLoop Studio"
-        )
-
-        val collection = MediaStore.Video.Media.getContentUri(
-            MediaStore.VOLUME_EXTERNAL_PRIMARY
-        )
-        val uri = contentResolver.insert(collection, values)
-            ?: throw IllegalStateException("Galeri tidak dapat membuat file.")
-
+        val values = ContentValues().apply {
+            put(MediaStore.Video.Media.DISPLAY_NAME, file.name)
+            put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+            put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/SeamlessLoop Studio")
+            put(MediaStore.Video.Media.IS_PENDING, 1)
+        }
+        val collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val uri = contentResolver.insert(collection, values) ?: throw Exception("Galeri tidak dapat membuat file.")
         try {
-            val destination = contentResolver.openOutputStream(uri, "w")
-                ?: throw IllegalStateException("Galeri tidak dapat dibuka.")
-
-            destination.use { output ->
-                file.inputStream().use { input ->
-                    input.copyTo(output)
-                }
-            }
-
+            val destination = contentResolver.openOutputStream(uri) ?: throw Exception("Galeri tidak dapat dibuka.")
+            destination.use { out -> file.inputStream().use { it.copyTo(out) } }
+            val finished = ContentValues().apply { put(MediaStore.Video.Media.IS_PENDING, 0) }
+            contentResolver.update(uri, finished, null, null)
             return uri
         } catch (e: Exception) {
             contentResolver.delete(uri, null, null)
@@ -735,6 +744,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        if (::previewVideo.isInitialized) previewVideo.stopPlayback()
         executor.shutdown()
         super.onDestroy()
     }
