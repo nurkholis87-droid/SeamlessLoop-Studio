@@ -181,7 +181,9 @@ class MainActivity : Activity() {
             setBackgroundColor(Color.BLACK)
             setOnPreparedListener { player ->
                 player.isLooping = false
-                seekTo(1)
+                // Mulai sebentar agar frame pertama benar-benar dirender, bukan layar hitam.
+                seekTo(100)
+                start()
             }
         }
         sourceCard.addView(previewVideo, LinearLayout.LayoutParams(
