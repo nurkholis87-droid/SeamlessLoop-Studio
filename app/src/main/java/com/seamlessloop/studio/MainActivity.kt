@@ -84,12 +84,13 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(18), dp(22), dp(18), dp(30))
         }
-
-        scroll.addView(
-            root,
-            ScrollView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
+scroll.addView(
+root,
+ViewGroup.LayoutParams(
+ViewGroup.LayoutParams.MATCH_PARENT,
+ViewGroup.LayoutParams.WRAP_CONTENT
+)
+)
             )
         )
 
