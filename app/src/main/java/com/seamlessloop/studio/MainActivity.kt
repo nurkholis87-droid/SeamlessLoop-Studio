@@ -89,12 +89,17 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(2), dp(2), dp(2), dp(8))
         }
-        val logo = ImageView(this).apply {
-            setImageResource(R.drawable.seamlessloop_logo)
-            scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
+        // Logo dibuat langsung dengan kode agar tidak bergantung pada file drawable eksternal.
+        val logo = TextView(this).apply {
+            text = "SL"
+            textSize = 23f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            setTypeface(null, android.graphics.Typeface.BOLD)
+            background = roundedBackground(blue, dp(18), cyan, dp(2))
             contentDescription = "Logo SeamlessLoop Studio"
         }
-        header.addView(logo, LinearLayout.LayoutParams(dp(72), dp(72)))
+        header.addView(logo, LinearLayout.LayoutParams(dp(64), dp(64)))
         val brandText = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), 0, 0, 0)
@@ -194,7 +199,7 @@ class MainActivity : Activity() {
             setHintTextColor(muted)
             hint = "1–60 menit"
             inputType = android.text.InputType.TYPE_CLASS_NUMBER
-            singleLine = true
+            isSingleLine = true
             setPadding(dp(14), dp(12), dp(14), dp(12))
             background = roundedBackground(Color.rgb(5, 18, 36), dp(12), line, dp(1))
         }
